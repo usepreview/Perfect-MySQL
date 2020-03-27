@@ -225,8 +225,8 @@ public final class MySQLStmt {
 	}
 	
 	/// returns current results
-	public func results() -> MySQLStmt.Results {
-		return Results(self)
+	public func results(binaryFields: [Int] = []) -> MySQLStmt.Results {
+		return Results(self, binaryFields: binaryFields)
 	}
 	
 	/// Fetches the next row of data from a result set and returns status
@@ -507,9 +507,12 @@ public final class MySQLStmt {
 		let lengthBuffers: UnsafeMutablePointer<UInt>
 		let isNullBuffers: UnsafeMutablePointer<my_bool>
 		private var closed = false
+		private var binaryFields: [Int]
+
 		
-		init(_ s: MySQLStmt) {
+		init(_ s: MySQLStmt, binaryFields: [Int]) {
 			stmt = s
+			self.binaryFields = binaryFields
 			numFields = Int(stmt.fieldCount())
 			binds = UnsafeMutablePointer<MYSQL_BIND>.allocate(capacity: numFields)
 			lengthBuffers = UnsafeMutablePointer<UInt>.allocate(capacity: numFields)
@@ -624,6 +627,14 @@ public final class MySQLStmt {
 			}
 		}
 		
+		private func getFieldType(n: Int, type: enum_field_types) -> GeneralType {
+			if binaryFields.contains(n) {
+				return .bytes(type)
+			} else {
+				return  mysqlTypeToGeneralType(type)
+			}
+		}
+		
 		func bindField(_ field: UnsafeMutablePointer<MYSQL_FIELD>) -> MYSQL_BIND {
 			let generalType = mysqlTypeToGeneralType(field)
 			let bind = bindToType(generalType)
@@ -644,7 +655,7 @@ public final class MySQLStmt {
 			guard cmp == 0 else {
 				return nil
 			}
-			let genType = mysqlTypeToGeneralType(bind.buffer_type)
+			let genType = getFieldType(n: n, type: bind.buffer_type)
 			let length = Int(bind.length.pointee)
 			switch genType {
 			case .double:
